@@ -1,15 +1,22 @@
+#include <dummy.h>
+
+#include <ESP8266httpUpdate.h>
+
 
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 #include <RCSwitch.h>
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
+//#include <Update.h>
 
 #define USE_SERIAL Serial
-
+const char *sketch_ver = "0.0.2";
 //WiFiMulti wifiMulti;
 // MQTT Broker settings
 const char *mqtt_broker = "broker.emqx.io";//"f16e3b17.ala.asia-southeast1.emqxsl.com";  // EMQX broker endpoint
-const char *mqtt_topic = "test/1";  // MQTT topic
+const char *mqtt_topic_root_con = "972526435150/root/connected";  // MQTT topic
+const char *mqtt_topic_devid = "/1";
+const char *mqtt_topic_ver = "/sketch/ver";  // MQTT topic ver
 const char *mqtt_username = "";//"mark";  // MQTT username for authentication
 const char *mqtt_password = "";//"123456";  // MQTT password for authentication
 const int mqtt_port = 8883;//8883;  //8883;//1883;  // MQTT port (TCP)
@@ -84,9 +91,12 @@ void connectToMQTTBroker() {
         Serial.printf("\r\nConnecting to MQTT Broker as %s.....\n", client_id.c_str());
         if (mqtt_client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
             Serial.println("Connected to MQTT broker");
-            mqtt_client.subscribe(mqtt_topic);
+            String addstr = String(mqtt_topic_root_con) + "/#";
+            //const char *tmpstr=addstr.c_str(addstr);
+            Serial.print("Subscribe to ");Serial.println(addstr);
+            mqtt_client.subscribe(addstr.c_str());
             // Publish message upon successful connection
-            mqtt_client.publish(mqtt_topic, "Hi EMQX I'm ESP8266 ^^");
+            mqtt_client.publish(mqtt_topic_root_con, "Hi EMQX I'm ESP8266 devid=1 ^^");
         } else {
             Serial.print("Failed to connect to MQTT broker, rc=");
             Serial.print(mqtt_client.state());
@@ -104,6 +114,16 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     }
     Serial.println();
     Serial.println("-----------------------");
+    if(strcmp(topic,mqtt_topic_root_con)==0){
+      String txstr = String(topic) + "/";
+      if((char)payload[0]=='?'){        
+        mqtt_client.publish(txstr.c_str(), mqtt_topic_devid);
+      }
+      else if((char)payload[0]=='v'){
+        mqtt_client.publish(txstr.c_str(), sketch_ver);
+      }
+    }
+    
 }
 
 void printHex(uint8_t num) {
@@ -153,6 +173,7 @@ void httpsget(const String &server, const String &filepath)
           // from the server, read them and print them:
           long readcount=0;
           int retry=0;
+          //Update.begin(size_t size)
           if(client.connected()){
             while (client.available() || retry<100) {
               if (client.available()){
@@ -162,7 +183,7 @@ void httpsget(const String &server, const String &filepath)
                   Serial.println(readcount);
                 }
                 retry=0;
-                Update.write()    
+                //Update.write()    
               }
               else{
                 delay(3);
@@ -195,8 +216,14 @@ void loop() {
     if(Serial.available()>0){
       //const String server="https://972526435150.ucoz.org/files/readtest.fw";
       mqtt_client.disconnect();
+      char ch=(char)Serial.read();
+      if(ch=='1'){
+        httpsget("972526435150.ucoz.org","/files/0.0.1.bin");
+      }
+      else if(ch=='2'){
+        httpsget("972526435150.ucoz.org","/files/0.0.2.bin");
+      }
       
-      httpsget("972526435150.ucoz.org","/files/readtest.fw");
       Serial.readString();
       connectToMQTTBroker();
     }
