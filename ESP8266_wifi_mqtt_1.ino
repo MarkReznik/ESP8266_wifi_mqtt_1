@@ -1,58 +1,35 @@
+
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 #include <RCSwitch.h>
 #include <PubSubClient.h>
+#include <ESP8266WiFi.h>
 
+#define USE_SERIAL Serial
+
+//WiFiMulti wifiMulti;
 // MQTT Broker settings
-const char *mqtt_broker = "f16e3b17.ala.asia-southeast1.emqxsl.com";  // EMQX broker endpoint
+const char *mqtt_broker = "broker.emqx.io";//"f16e3b17.ala.asia-southeast1.emqxsl.com";  // EMQX broker endpoint
 const char *mqtt_topic = "test/1";  // MQTT topic
-const char *mqtt_username = "mark";  // MQTT username for authentication
-const char *mqtt_password = "123456";  // MQTT password for authentication
-const int mqtt_port = 8883;  //8883;//1883;  // MQTT port (TCP)
+const char *mqtt_username = "";//"mark";  // MQTT username for authentication
+const char *mqtt_password = "";//"123456";  // MQTT password for authentication
+const int mqtt_port = 8883;//8883;  //8883;//1883;  // MQTT port (TCP)
 
 //WiFiClient espClient;
 WiFiClientSecure espClient;     // <-- Change #1: Secure connection to MQTT Server
 
 // Create an instance of WiFiClientSecure
-WiFiClientSecure wifiClient;
+//WiFiClientSecure wifiClient;
 // Create an instance of PubSubClient
 PubSubClient mqtt_client(espClient);
 
-/*
-static const char *fingerprint PROGMEM = "44 14 9A 3F C3 E9 F1 F3 84 1A B4 9F B6 4D 19 8A B2 92 31 D6";
 
-// Root CA certificate
-const char* rootCACertificate = R"(
------BEGIN CERTIFICATE-----
-MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh
-MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
-d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD
-QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT
-MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j
-b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG
-9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB
-CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97
-nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt
-43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P
-T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4
-gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO
-BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR
-TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw
-DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr
-hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg
-06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF
-PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls
-YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk
-CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=
------END CERTIFICATE-----
-)";
-*/
 
 void connectToMQTTBroker();
 
 void mqttCallback(char *topic, byte *payload, unsigned int length);
 
 RCSwitch mySwitch = RCSwitch();
-
+#define INTPIN  0//D2
 void setup() {
     // WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     // it is a good practice to make sure your code sets wifi mode how you want it.
@@ -60,7 +37,7 @@ void setup() {
     // put your setup code here, to run once:
     Serial.begin(115200);
     
-    mySwitch.enableReceive(D2);  // Receiver on interrupt 0 => that is pin #2
+    mySwitch.enableReceive(INTPIN);  // Receiver on interrupt 0 => that is pin #2
     
     //WiFiManager, Local intialization. Once its business is done, there is no need to keep it around
     WiFiManager wm;
@@ -89,6 +66,7 @@ void setup() {
         Serial.println("connected...yeey :)");
         //espClient.setFingerprint(fingerprint);   // <-- Change #3: Set the SHA1 fingerprint
         espClient.setInsecure();// Alternative: 
+        
         mqtt_client.setServer(mqtt_broker, mqtt_port);
         mqtt_client.setCallback(mqttCallback);
         
@@ -99,10 +77,11 @@ void setup() {
     }
 
 }
+
 void connectToMQTTBroker() {
     while (!mqtt_client.connected()) {
         String client_id = "esp8266-client-" + String(WiFi.macAddress());
-        Serial.printf("Connecting to MQTT Broker as %s.....\n", client_id.c_str());
+        Serial.printf("\r\nConnecting to MQTT Broker as %s.....\n", client_id.c_str());
         if (mqtt_client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
             Serial.println("Connected to MQTT broker");
             mqtt_client.subscribe(mqtt_topic);
@@ -127,14 +106,99 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     Serial.println("-----------------------");
 }
 
+void printHex(uint8_t num) {
+  char hexCar[2];
+
+  sprintf(hexCar, "%02X", num);
+  Serial.print(hexCar);
+}
+
+
+
+void httpsget(const String &server, const String &filepath)
+{
+// wait for WiFi connection
+    //if((wifiMulti.run() == WL_CONNECTED)) 
+    {
+        //std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
+        //client->setFingerprint(fingerprint_sni_cloudflaressl_com);
+        BearSSL::WiFiClientSecure client;
+        client.setInsecure();
+        Serial.println("\nStarting connection to server...");
+        Serial.println(server);
+        //const char*  server = "www.howsmyssl.com";  // Server URL
+        if (!client.connect(server, 443))
+          Serial.println("Connection failed!");
+        else {
+          Serial.println("Connected to server!");
+          // Make a HTTP request:
+          Serial.println(server);
+          Serial.println(filepath);
+          client.print("GET ");client.print(filepath);client.println(" HTTP/1.0");
+          //client.println("GET https://www.howsmyssl.com/a/check HTTP/1.0");
+          //client.println("Host: www.howsmyssl.com");
+          client.print("Host: ");client.println(server);
+          client.println("Connection: close");
+          client.println();
+          
+          while (client.connected()) {
+            String line = client.readStringUntil('\n');
+            if (line == "\r") {
+              Serial.println("headers received");
+              break;
+            }
+          }
+          
+          // if there are incoming bytes available
+          // from the server, read them and print them:
+          long readcount=0;
+          int retry=0;
+          if(client.connected()){
+            while (client.available() || retry<100) {
+              if (client.available()){
+                char c = client.read();
+                //Serial.write(c);
+                if((++readcount % 100000)==0){
+                  Serial.println(readcount);
+                }
+                retry=0;
+                Update.write()    
+              }
+              else{
+                delay(3);
+                retry++;
+              }
+            }
+            Serial.print("size: ");Serial.println(readcount);
+            Serial.print("retry: ");Serial.println(retry);
+          }
+          else{
+            Serial.println("client disconected");
+          }
+          client.stop();
+        }
+    }
+}
+
 void loop() {
     // put your main code here, to run repeatedly:  
     if (mySwitch.available()) {
       //output(mySwitch.getReceivedValue(), mySwitch.getReceivedBitlength(), mySwitch.getReceivedDelay(), mySwitch.getReceivedRawdata(),mySwitch.getReceivedProtocol());
       mySwitch.resetAvailable();
     } 
+    
     if (!mqtt_client.connected()) {
         connectToMQTTBroker();
     }
     mqtt_client.loop();
+    
+    if(Serial.available()>0){
+      //const String server="https://972526435150.ucoz.org/files/readtest.fw";
+      mqtt_client.disconnect();
+      
+      httpsget("972526435150.ucoz.org","/files/readtest.fw");
+      Serial.readString();
+      connectToMQTTBroker();
+    }
+
 }
