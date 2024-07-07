@@ -6,7 +6,7 @@
 #include <EEPROM.h>
 
 #define USE_SERIAL Serial
-const char *sketch_VER = "000F";
+const char *sketch_VER = "0012";
 const char *sketch_VID = "0001";//type of device 0001=ESP8622EX Wemos D1 R2&mini RF433+MQTT+Update-Https
 const char *sketch_VID_info = "VID0001 - ESP8622EX Wemos D1 R2&mini. RF433+MQTT+Update-Https";
 uint32_t chipID=ESP.getChipId();
@@ -35,6 +35,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int length);
 RCSwitch mySwitch = RCSwitch();
 #define INTPIN  D2//0//D2
 
+
+
 // Define the name for the downloaded firmware file
 //#define FILE_NAME "firmware.bin"
 String fwfilename="";
@@ -42,6 +44,9 @@ String filepath="";
 String hostname="";
 
 bool runupdate=false;
+#define ENTER D5
+#define UP  D6
+#define DOWN  D7
 
 #define BUTTONS_MAX 4
 #define EEPROM_OFFSET 10
@@ -83,10 +88,28 @@ uint32_t eepromReadUint32(const int address){
   return val;
 }
 
+void changeButton(uint8_t button, bool state){
+  if(state){
+    digitalWrite(button,LOW);
+    pinMode(button, OUTPUT);
+  }
+  else{
+    pinMode(button, INPUT);
+  }
+}
+void pressButton(uint8_t button){
+  changeButton(button,true);
+  delay(500);
+  changeButton(button, false);
+}
+
 void setup() {
     // WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     // it is a good practice to make sure your code sets wifi mode how you want it.
-    
+    pinMode(UP, INPUT);
+    pinMode(DOWN, INPUT);
+    pinMode(ENTER, INPUT);
+
     EEPROM.begin(512);//define eeprom use 512 bytes
     
     // put your setup code here, to run once:
@@ -209,7 +232,12 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
       }
       else if(recv_payload=="state"){        
         mqtt_client.publish((topicStr).c_str(), "TBD");
-        rf433_but=1;
+        rf433_but=0;
+      }
+      else if(recv_payload=="1"){        
+        pressButton(UP);
+        mqtt_client.publish((topicStr).c_str(), "UP OK");
+        rf433_but=0;
       }
     }
     else if(topicStr==(String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/button/2")){
@@ -217,11 +245,21 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
         mqtt_client.publish((topicStr).c_str(), "send RF433 for button 2");
         rf433_but=2;
       }
+      else if(recv_payload=="1"){        
+        pressButton(DOWN);
+        mqtt_client.publish((topicStr).c_str(), "DOWN OK");
+        rf433_but=0;
+      }
     }
     else if(topicStr==(String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/button/3")){
       if(recv_payload=="scan"){        
         mqtt_client.publish((topicStr).c_str(), "send RF433 for button 3");
         rf433_but=3;
+      }
+      else if(recv_payload=="1"){        
+        pressButton(ENTER);
+        mqtt_client.publish((topicStr).c_str(), "ENTER OK");
+        rf433_but=0;
       }
     }
     else if(topicStr==(String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/button/4")){
@@ -359,7 +397,23 @@ void loop() {
           u32val=eepromReadUint32(EEPROM_OFFSET+i);
           if(u32val==rf433id){
             topicStr=String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/button/"+String(i+1);
-            mqtt_client.publish(topicStr.c_str(), "Activated.");
+            if(i==0){        
+              pressButton(DOWN);
+              delay(1000);
+              pressButton(ENTER);
+              mqtt_client.publish((topicStr).c_str(), "Go sleep OK");
+              rf433_but=0;
+            }
+            else if(i==1){        
+              pressButton(ENTER);
+              delay(1000);
+              pressButton(UP);
+              mqtt_client.publish((topicStr).c_str(), "Wakeup OK");
+              rf433_but=0;
+            }
+            else{
+              mqtt_client.publish(topicStr.c_str(), "Activated.");
+            }
             break;
           }
         }
