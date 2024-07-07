@@ -5,10 +5,24 @@
 //#include <Update.h>
 #include <EEPROM.h>
 
+//#define ESP8266_0001  1// Uncomment to use 0001
+#ifndef ESP8266_0001
+#define ESP8266_0002  2//
+#endif
+
 #define USE_SERIAL Serial
-const char *sketch_VER = "0012";
+const char *sketch_VER = "0013";
+
+#ifdef ESP8266_0001
 const char *sketch_VID = "0001";//type of device 0001=ESP8622EX Wemos D1 R2&mini RF433+MQTT+Update-Https
-const char *sketch_VID_info = "VID0001 - ESP8622EX Wemos D1 R2&mini. RF433+MQTT+Update-Https";
+const char *sketch_VID_info = "VID0001 - ESP8622EX Wemos D1 R2&mini. RF433+MQTT+Update-Https+Buttons";
+#endif
+
+#ifdef ESP8266_0002
+const char *sketch_VID = "0002";//type of device 0001=ESP8622EX Wemos D1 R2&mini RF433+MQTT+Update-Https
+const char *sketch_VID_info = "VID0002 - ESP8622 ESP-01S. RF433+MQTT+Update-Https+Buttons";
+#endif
+
 uint32_t chipID=ESP.getChipId();
 String  DEVID;
 String  mqtt_topic_devid;
@@ -33,7 +47,13 @@ void connectToMQTTBroker();
 void mqttCallback(char *topic, byte *payload, unsigned int length);
 
 RCSwitch mySwitch = RCSwitch();
+#ifdef ESP8266_0001
 #define INTPIN  D2//0//D2
+#endif
+#ifdef ESP8266_0002
+#define INTPIN  0
+#endif
+
 
 
 
@@ -44,9 +64,18 @@ String filepath="";
 String hostname="";
 
 bool runupdate=false;
+
+#ifdef ESP8266_0001
 #define ENTER D5
 #define UP  D6
 #define DOWN  D7
+#endif
+
+#ifdef ESP8266_0002
+#define ENTER 2
+#define UP  2
+#define DOWN  2
+#endif
 
 #define BUTTONS_MAX 4
 #define EEPROM_OFFSET 10
