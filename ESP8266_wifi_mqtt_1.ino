@@ -1,14 +1,42 @@
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
 #include <RCSwitch.h>
 #include <PubSubClient.h>
-#include <ESP8266WiFi.h>
+
+
+
 //#include <Update.h>
 #include <EEPROM.h>
 
-//#define ESP8266_0001  1// Uncomment to use 0001
-#ifndef ESP8266_0001
-#define ESP8266_0002  2//
+/*
+#if defined(ESP8266_WEMOS_D1MINI) || defined(ESP8266_GENERIC) || defined(ESP8266)
+#define ESP8266 1
+#elif defined(LOLIN_S2_MINI) || defined(ESP32_DEV)
+#define ESP32 1
 #endif
+*/
+
+#if defined(ESP8266) 
+  #include <ESP8266WiFi.h>
+  #if defined(ARDUINO_ESP8266_WEMOS_D1MINI)
+    #define ESP8266_0001  1// Uncomment to use 0001 ESP8622EX Wemos D1 R2&mini
+  #elif defined(ARDUINO_ESP8266_GENERIC)
+    #define ESP8266_0002  2// Uncomment to use 0002 ESP8622 ESP-01S
+  #endif
+  uint32_t chipID=ESP.getChipId();
+#elif defined(ESP32)
+  #include <WiFi.h>
+  #include <WiFiClientSecure.h>
+  //#include <ArduinoBearSSL.h>
+  uint64_t macAddress = ESP.getEfuseMac();
+  uint64_t macAddressTrunc = macAddress << 40;
+  uint32_t chipID = macAddressTrunc >> 40;
+  #if defined(ARDUINO_LOLIN_S2_MINI)
+    #define ESP32_0003  3// Uncomment to use 0003 ESP32S2 Wemos S2 mini
+  #elif defined(ARDUINO_ESP32_DEV)
+    #define ESP32_0004  4// Uncomment to use 0004 ESP32 DevKit
+  #endif
+#endif
+
 
 #define USE_SERIAL Serial
 const char *sketch_VER = "0013";
@@ -23,7 +51,11 @@ const char *sketch_VID = "0002";//type of device 0001=ESP8622EX Wemos D1 R2&mini
 const char *sketch_VID_info = "VID0002 - ESP8622 ESP-01S. RF433+MQTT+Update-Https+Buttons";
 #endif
 
-uint32_t chipID=ESP.getChipId();
+#ifdef ESP32_0003
+const char *sketch_VID = "0003";//
+const char *sketch_VID_info = "VID0003 - ESP32S2 Wemos S2 mini. RF433+MQTT+Update-Https+Buttons";
+#endif
+
 String  DEVID;
 String  mqtt_topic_devid;
 //WiFiMulti wifiMulti;
@@ -39,6 +71,7 @@ const int mqtt_port = 8883;//8883;  //8883;//1883;  // MQTT port (TCP)
 //WiFiClient espClient;
 WiFiClientSecure espClient;     // <-- Change #1: Secure connection to MQTT Server
 
+
 // Create an instance of WiFiClientSecure
 //WiFiClientSecure wifiClient;
 // Create an instance of PubSubClient
@@ -51,6 +84,9 @@ RCSwitch mySwitch = RCSwitch();
 #define INTPIN  D2//0//D2
 #endif
 #ifdef ESP8266_0002
+#define INTPIN  0
+#endif
+#ifdef ESP32_0003
 #define INTPIN  0
 #endif
 
@@ -72,6 +108,12 @@ bool runupdate=false;
 #endif
 
 #ifdef ESP8266_0002
+#define ENTER 2
+#define UP  2
+#define DOWN  2
+#endif
+
+#ifdef ESP32_0003
 #define ENTER 2
 #define UP  2
 #define DOWN  2
@@ -144,7 +186,13 @@ void setup() {
     // put your setup code here, to run once:
     Serial.begin(115200);
     delay(1000);
+#if defined(ESP8266)
     DEVID=String(ESP.getChipId());
+#elif defined(ESP32)
+    uint64_t macAddress = ESP.getEfuseMac();
+    uint64_t macAddressTrunc = macAddress << 40;
+    DEVID = String(macAddressTrunc >> 40);
+#endif
     mqtt_topic_devid="/"+String(sketch_VID)+"/"+DEVID;
     Serial.println("");
     Serial.println("Firmware Version: "+String(sketch_VER));
@@ -228,7 +276,15 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     else if(topicStr==String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/firmware"){
       if(recv_payload.endsWith(".bin")){
         if(recv_payload.startsWith(sketch_VID)){
-          String ver=recv_payload.substring(String(sketch_VID).length(),recv_payload.indexOf(".bin"));
+          String ver;//=recv_payload.substring(String(sketch_VID).length(),recv_payload.indexOf(".bin"));
+          String serverFilePath=recv_payload.substring(String(sketch_VID).length());
+          //if(serverFilePath.startsWith("https://")){
+            hostname=serverFilePath.substring(0,serverFilePath.lastIndexOf("/"));
+            ver = serverFilePath.substring(serverFilePath.lastIndexOf("/"),serverFilePath.indexOf(".bin"));
+          //}
+          Serial.println("server file path:"+serverFilePath);
+          Serial.println("hostname:"+hostname);
+          Serial.println("ver:"+ver);
           if(ver>sketch_VER){
             mqtt_client.publish((topicStr).c_str(), ("Updating to "+ver).c_str());
             fwfilename=recv_payload;
@@ -247,7 +303,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     //topicStr=String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/button"+String(rf433_but);
     else if(topicStr==(String(mqtt_topic_root_con)+String(mqtt_topic_devid)+"/button/1")){
       if(recv_payload=="?"){        
-        mqtt_client.publish((topicStr).c_str(), "scan,code,state");
+        mqtt_client.publish((topicStr).c_str(), "scan,code,state,up,down,enter");
         rf433_but=1;
       }
       else if(recv_payload=="scan"){        
@@ -263,9 +319,19 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
         mqtt_client.publish((topicStr).c_str(), "TBD");
         rf433_but=0;
       }
-      else if(recv_payload=="1"){        
+      else if(recv_payload=="up"){        
         pressButton(UP);
         mqtt_client.publish((topicStr).c_str(), "UP OK");
+        rf433_but=0;
+      }
+      else if(recv_payload=="down"){        
+        pressButton(DOWN);
+        mqtt_client.publish((topicStr).c_str(), "DOWN OK");
+        rf433_but=0;
+      }
+      else if(recv_payload=="enter"){        
+        pressButton(ENTER);
+        mqtt_client.publish((topicStr).c_str(), "ENTER OK");
         rf433_but=0;
       }
     }
@@ -309,12 +375,19 @@ void printHex(uint8_t num) {
 void httpsUpdate(const String &server, const String &filepath)
 {
   mqtt_client.disconnect();
+  #ifdef ESP32
+  WiFiClientSecure client;
+  #else
+  #ifdef ESP8266
   BearSSL::WiFiClientSecure client;
+  #endif
+  #endif
+
   client.setInsecure();
   Serial.println("\nStarting connection to server...");
   Serial.println(server);
   //const char*  server = "www.howsmyssl.com";  // Server URL
-  if (!client.connect(server, 443))
+  if (!client.connect(server.c_str(), 443))
     Serial.println("Connection failed!");
   else {
     Serial.println("Connected to server!");
@@ -388,7 +461,8 @@ void httpsUpdate(const String &server, const String &filepath)
         Serial.println("Successful update");
         Serial.println("Reset in 3 seconds....");
         delay(3000);
-        ESP.restart(); // Restart ESP32 to apply the update
+        ESP.restart();
+        delay(1000);
       }
       else {
         Serial.println("Error Occurred:" + String(Update.getError()));
@@ -470,6 +544,7 @@ void loop() {
     
     if(runupdate){
       runupdate=false;
+      if(hostname)
       hostname="972526435150.ucoz.org";
       filepath="/files/"+String(sketch_VID)+"/"+fwfilename;
       Serial.println("host: "+hostname+" filepath: "+filepath);
@@ -481,18 +556,21 @@ void loop() {
       //mqtt_client.disconnect();
       char ch=(char)Serial.read();
       if(ch=='1'){
-        httpsUpdate("972526435150.ucoz.org","/files/D1mini_0.0.3.bin");
+        httpsUpdate("972526435150.ucoz.org","/files/00030014.bin");
       }
       else if(ch=='2'){
         httpsUpdate("972526435150.ucoz.org","/files/0.0.2.bin");
       }
       else if(ch=='s'){
-        Serial.println("chip real size: "+String(ESP.getFlashChipRealSize()));
-        Serial.println("chip size: "+String(ESP.getFlashChipSize()));
-        Serial.println("chip id: "+String(ESP.getFlashChipId()));
+        //Serial.println("chip real size: "+String(ESP.getFlashChipRealSize()));
+        //Serial.println("chip size: "+String(ESP.getFlashChipSize()));
+        //Serial.println("chip id: "+String(ESP.getFlashChipId()));
       }
       else if(ch=='r'){
-        ESP.reset();
+        Serial.println("Rebooting...");
+        delay(1000);
+        ESP.restart();
+        delay(1000);
       }
       else if(ch=='u'){
         String update_host=Serial.readStringUntil('/');update_host.trim();
